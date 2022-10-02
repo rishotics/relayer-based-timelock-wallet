@@ -2,16 +2,17 @@
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./BasicMetaTransaction.sol";
 import "hardhat/console.sol";
 
-contract RelayerWallet {
+contract RelayerWallet is BasicMetaTransaction{
     ///ERROR to mark unexpected Ether payments send to Streaming contract
     error UnexpectedETH(address sender, uint256 amount);
 
     ///Mutex variable for preveting re-entrancy
     uint256 private unlocked = 1;
 
-    uint256 public unlockTime;
+    uint256 public currentId;
 
     struct EIP712Domain {
         string name;
@@ -25,17 +26,27 @@ contract RelayerWallet {
         address from;
     }
 
+    enum TransferMode {
+        EthMode,
+        TokenMode
+    }
+
     struct TransferDetails {
-        address sender;
-        address recepient;
-        address tokenAddress;
+        uint256 id;
         uint256 lockingTime;
         uint256 currentTime;
         uint256 amountEther;
         uint256 amountToken;
+        address sender;
+        address recepient;
+        address tokenAddress;
+        TransferMode mode;
+        bool isActive;
     }
 
     mapping(address => uint256) public nonces;
+
+    mapping(uint256 => TransferDetails) public idToTransferDetails;
 
     bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
         keccak256(
@@ -70,7 +81,7 @@ contract RelayerWallet {
         unlocked = 1;
     }
 
-    /// @notice Checks signature 
+    /// @notice Checks signature
     modifier checkSignature(
         address recieverAddress,
         bytes32 r,
@@ -113,6 +124,7 @@ contract RelayerWallet {
         external
         payable
     {
+        address sender = msgSender();
         require(
             _lockingTime > 0,
             "RelayerWallet::depositEther: locking time should be greater than 0"
@@ -123,16 +135,22 @@ contract RelayerWallet {
         );
 
         TransferDetails memory transferDetails = TransferDetails({
-            sender: msg.sender,
+            id: currentId,
+            sender: sender,
             recepient: _recepient,
             tokenAddress: address(0),
             lockingTime: _lockingTime,
             currentTime: block.timestamp,
             amountEther: msg.value,
-            amountToken: 0
+            amountToken: 0,
+            mode: TransferMode.EthMode,
+            isActive: true
         });
 
-        userToDetails[msg.sender][_recepient] = transferDetails;
+        userToDetails[sender][_recepient] = transferDetails;
+        idToTransferDetails[currentId] = transferDetails;
+
+        currentId++;
     }
 
     function depositToken(
@@ -141,6 +159,8 @@ contract RelayerWallet {
         address _tokenAddress,
         uint256 _amountToken
     ) external {
+        address sender = msgSender();
+
         require(
             _lockingTime > 0,
             "RelayerWallet::depositEther: locking time should be greater than 0"
@@ -168,60 +188,65 @@ contract RelayerWallet {
 
         _safeTransferFrom(
             _tokenAddress,
-            msg.sender,
+            msgSender(),
             address(this),
             _amountToken
         );
 
         TransferDetails memory transferDetails = TransferDetails({
-            sender: msg.sender,
+            id: currentId,
+            sender: msgSender(),
             recepient: _recepient,
             tokenAddress: _tokenAddress,
             lockingTime: _lockingTime,
             currentTime: block.timestamp,
             amountEther: 0,
-            amountToken: _amountToken
+            amountToken: _amountToken,
+            mode: TransferMode.TokenMode,
+            isActive: true
         });
 
-        userToDetails[msg.sender][_recepient] = transferDetails;
+        userToDetails[msgSender()][_recepient] = transferDetails;
+        idToTransferDetails[currentId] = transferDetails;
+
+        currentId++;
     }
 
     function withdrawEther(
+        uint256 _id,
         address recieverAddress,
-        address senderAddress,
         bytes32 r,
         bytes32 s,
         uint8 v
     ) public checkSignature(recieverAddress, r, s, v) checkReentracy {
-        TransferDetails memory currTransferDetails = userToDetails[
-            senderAddress
-        ][recieverAddress];
+        TransferDetails memory currTransferDetails = idToTransferDetails[_id];
 
         require(
             currTransferDetails.lockingTime >=
                 block.timestamp - currTransferDetails.currentTime,
-            "RelayerWallet::depositToken: You can't withdraw yet"
+            "RelayerWallet::withdrawEther: You can't withdraw yet"
         );
 
-        uint256 amountEther = currTransferDetails.amountEther;
+        require(
+            currTransferDetails.isActive,
+            "RelayerWallet::withdrawEther: Transfer has been completed"
+        );
 
-        delete (userToDetails[senderAddress][recieverAddress]);
+        idToTransferDetails[_id].isActive = false;
 
-        _safeTransferETH(recieverAddress, amountEther);
+        _safeTransferETH(recieverAddress, currTransferDetails.amountEther);
 
         nonces[recieverAddress]++;
     }
 
     function withdrawToken(
+        uint256 _id,
         address recieverAddress,
-        address senderAddress,
         bytes32 r,
         bytes32 s,
         uint8 v
     ) public checkSignature(recieverAddress, r, s, v) checkReentracy {
-        TransferDetails memory currTransferDetails = userToDetails[
-            senderAddress
-        ][recieverAddress];
+        TransferDetails memory currTransferDetails = idToTransferDetails[_id];
 
         require(
             currTransferDetails.lockingTime >=
@@ -229,17 +254,24 @@ contract RelayerWallet {
             "RelayerWallet::withdrawToken: You can't withdraw yet"
         );
 
-        uint256 amountToken = currTransferDetails.amountToken;
-        address tokenAddress = currTransferDetails.tokenAddress;
+        require(
+            currTransferDetails.isActive,
+            "RelayerWallet::withdrawToken: Transfer has been completed"
+        );
+
+        idToTransferDetails[_id].isActive = false;
 
         require(
-            IERC20(tokenAddress).balanceOf(address(this)) >= amountToken,
+            IERC20(currTransferDetails.tokenAddress).balanceOf(address(this)) >=
+                currTransferDetails.amountToken,
             "RelayerWallet::withdrawToken: less token balance present"
         );
 
-        delete (userToDetails[senderAddress][recieverAddress]);
-
-        _safeTransfer(tokenAddress, recieverAddress, amountToken);
+        _safeTransfer(
+            currTransferDetails.tokenAddress,
+            recieverAddress,
+            currTransferDetails.amountToken
+        );
 
         nonces[recieverAddress]++;
     }

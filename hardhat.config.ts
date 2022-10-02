@@ -29,6 +29,10 @@ export default {
       accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : []
       
   },
+    goerli: {
+      url: process.env.GOERLI_URL || '',
+      accounts:  process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : []
+    }
   },
   etherscan: {
     apiKey: process.env.POLYGONSCAN_API_KEY,
