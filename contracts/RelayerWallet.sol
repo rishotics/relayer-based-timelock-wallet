@@ -2,10 +2,11 @@
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import "./BasicMetaTransaction.sol";
 import "hardhat/console.sol";
 
-contract RelayerWallet is BasicMetaTransaction{
+contract RelayerWallet is ERC2771Context {
     ///ERROR to mark unexpected Ether payments send to Streaming contract
     error UnexpectedETH(address sender, uint256 amount);
 
@@ -13,6 +14,8 @@ contract RelayerWallet is BasicMetaTransaction{
     uint256 private unlocked = 1;
 
     uint256 public currentId;
+
+    address public trustedForwarder;
 
     struct EIP712Domain {
         string name;
@@ -70,6 +73,7 @@ contract RelayerWallet is BasicMetaTransaction{
     address payable public owner;
 
     mapping(address => mapping(address => TransferDetails)) userToDetails;
+    mapping(address => uint256[]) recepientToId;
 
     event Withdrawal(uint256 amount, uint256 when);
 
@@ -118,13 +122,16 @@ contract RelayerWallet is BasicMetaTransaction{
         _;
     }
 
-    constructor() {}
+    constructor(address _trustedForwarder) ERC2771Context(_trustedForwarder) {
+        trustedForwarder = _trustedForwarder;
+    }
 
     function depositEther(address _recepient, uint256 _lockingTime)
         external
         payable
+        returns (uint256)
     {
-        address sender = msgSender();
+        address sender = _msgSender();
         require(
             _lockingTime > 0,
             "RelayerWallet::depositEther: locking time should be greater than 0"
@@ -149,8 +156,10 @@ contract RelayerWallet is BasicMetaTransaction{
 
         userToDetails[sender][_recepient] = transferDetails;
         idToTransferDetails[currentId] = transferDetails;
+        recepientToId[_recepient].push(currentId);
 
         currentId++;
+        return transferDetails.id;
     }
 
     function depositToken(
@@ -158,8 +167,8 @@ contract RelayerWallet is BasicMetaTransaction{
         uint256 _lockingTime,
         address _tokenAddress,
         uint256 _amountToken
-    ) external {
-        address sender = msgSender();
+    ) external returns (uint256) {
+        address sender = _msgSender();
 
         require(
             _lockingTime > 0,
@@ -186,16 +195,13 @@ contract RelayerWallet is BasicMetaTransaction{
             "RelayerWallet::depositToken: Allowance not set"
         );
 
-        _safeTransferFrom(
-            _tokenAddress,
-            msgSender(),
-            address(this),
-            _amountToken
-        );
+        _safeTransferFrom(_tokenAddress, sender, address(this), _amountToken);
+        // bool success = IERC20(_tokenAddress).transferFrom(msg.sender, address(this), _amountToken);
+        // require(success, "_safeTransferFrom: transferFrom failed");
 
         TransferDetails memory transferDetails = TransferDetails({
             id: currentId,
-            sender: msgSender(),
+            sender: sender,
             recepient: _recepient,
             tokenAddress: _tokenAddress,
             lockingTime: _lockingTime,
@@ -206,23 +212,24 @@ contract RelayerWallet is BasicMetaTransaction{
             isActive: true
         });
 
-        userToDetails[msgSender()][_recepient] = transferDetails;
+        userToDetails[sender][_recepient] = transferDetails;
         idToTransferDetails[currentId] = transferDetails;
+        recepientToId[_recepient].push(currentId);
 
         currentId++;
+        return transferDetails.id;
     }
 
-    function withdrawEther(
-        uint256 _id,
-        address recieverAddress,
-        bytes32 r,
-        bytes32 s,
-        uint8 v
-    ) public checkSignature(recieverAddress, r, s, v) checkReentracy {
+    function withdrawEther(uint256 _id) external {
+        require(
+            _id < currentId && _id >= 0,
+            "RelayerWallet::withdrawEther: Id not correct"
+        );
+
         TransferDetails memory currTransferDetails = idToTransferDetails[_id];
 
         require(
-            currTransferDetails.lockingTime >=
+            currTransferDetails.lockingTime <=
                 block.timestamp - currTransferDetails.currentTime,
             "RelayerWallet::withdrawEther: You can't withdraw yet"
         );
@@ -231,25 +238,26 @@ contract RelayerWallet is BasicMetaTransaction{
             currTransferDetails.isActive,
             "RelayerWallet::withdrawEther: Transfer has been completed"
         );
+        address recieverAddress = payable(currTransferDetails.recepient);
 
         idToTransferDetails[_id].isActive = false;
 
         _safeTransferETH(recieverAddress, currTransferDetails.amountEther);
-
-        nonces[recieverAddress]++;
     }
 
-    function withdrawToken(
-        uint256 _id,
-        address recieverAddress,
-        bytes32 r,
-        bytes32 s,
-        uint8 v
-    ) public checkSignature(recieverAddress, r, s, v) checkReentracy {
+    function withdrawToken(uint256 _id)
+        public
+        checkReentracy
+    {
+        require(
+            _id < currentId && _id >= 0,
+            "RelayerWallet::withdrawEther: Id not correct"
+        );
+        
         TransferDetails memory currTransferDetails = idToTransferDetails[_id];
 
         require(
-            currTransferDetails.lockingTime >=
+            currTransferDetails.lockingTime <=
                 block.timestamp - currTransferDetails.currentTime,
             "RelayerWallet::withdrawToken: You can't withdraw yet"
         );
@@ -260,6 +268,8 @@ contract RelayerWallet is BasicMetaTransaction{
         );
 
         idToTransferDetails[_id].isActive = false;
+
+        address recieverAddress = currTransferDetails.recepient;
 
         require(
             IERC20(currTransferDetails.tokenAddress).balanceOf(address(this)) >=
@@ -276,6 +286,19 @@ contract RelayerWallet is BasicMetaTransaction{
         nonces[recieverAddress]++;
     }
 
+    function getTransfersForARecepient(address recepient)
+        external
+        view
+        returns (TransferDetails[] memory)
+    {
+        uint256[] memory ids = recepientToId[recepient];
+        TransferDetails[] memory transfers = new TransferDetails[](ids.length);
+        for (uint256 i = 0; i < ids.length; i++) {
+            transfers[i] = idToTransferDetails[ids[i]];
+        }
+        return transfers;
+    }
+
     /**
      * @notice private funciton to safetly transfer token from an address to another address
      * @param to address to
@@ -288,13 +311,8 @@ contract RelayerWallet is BasicMetaTransaction{
         uint256 value
     ) private {
         // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
-        (bool success, bytes memory data) = _token.call(
-            abi.encodeWithSelector(0x23b872dd, from, to, value)
-        );
-        require(
-            success && (data.length == 0 || abi.decode(data, (bool))),
-            "_safeTransferFrom: transferFrom failed"
-        );
+        bool success = IERC20(_token).transferFrom(from, to, value);
+        require(success, "_safeTransferFrom: transferFrom failed");
     }
 
     /**
@@ -329,12 +347,5 @@ contract RelayerWallet is BasicMetaTransaction{
         );
         (bool success, ) = to.call{value: value}(new bytes(0));
         require(success, "Streaming::safeTransferETH: ETH transfer failed");
-    }
-
-    /**
-     * @notice reciever funciton to handle unexpected ether payments
-     */
-    receive() external payable {
-        revert UnexpectedETH(msg.sender, msg.value);
     }
 }

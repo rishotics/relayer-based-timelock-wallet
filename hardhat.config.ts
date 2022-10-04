@@ -19,7 +19,7 @@ export default {
       },
     },
   },
-  defaultNetwork: "hardhat",
+  defaultNetwork: "goerli",
   networks: {
     hardhat: {
       allowUnlimitedContractSize: true,
