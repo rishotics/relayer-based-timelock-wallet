@@ -3,17 +3,6 @@ export const RelayerWalletABI =   [
     "inputs": [
       {
         "internalType": "address",
-        "name": "_trustedForwarder",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
         "name": "sender",
         "type": "address"
       },
@@ -25,6 +14,31 @@ export const RelayerWalletABI =   [
     ],
     "name": "UnexpectedETH",
     "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "userAddress",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address payable",
+        "name": "relayerAddress",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes",
+        "name": "functionSignature",
+        "type": "bytes"
+      }
+    ],
+    "name": "MetaTransactionExecuted",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -120,6 +134,64 @@ export const RelayerWalletABI =   [
     "inputs": [
       {
         "internalType": "address",
+        "name": "userAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "functionSignature",
+        "type": "bytes"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "sigR",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "sigS",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "sigV",
+        "type": "uint8"
+      }
+    ],
+    "name": "executeMetaTransaction",
+    "outputs": [
+      {
+        "internalType": "bytes",
+        "name": "",
+        "type": "bytes"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "getNonce",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "nonce",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "recepient",
         "type": "address"
       }
@@ -169,7 +241,7 @@ export const RelayerWalletABI =   [
             "type": "address"
           },
           {
-            "internalType": "enum RelayerWallet.TransferMode",
+            "internalType": "enum RelayerWalletCustom.TransferMode",
             "name": "mode",
             "type": "uint8"
           },
@@ -179,7 +251,7 @@ export const RelayerWalletABI =   [
             "type": "bool"
           }
         ],
-        "internalType": "struct RelayerWallet.TransferDetails[]",
+        "internalType": "struct RelayerWalletCustom.TransferDetails[]",
         "name": "",
         "type": "tuple[]"
       }
@@ -238,7 +310,7 @@ export const RelayerWalletABI =   [
         "type": "address"
       },
       {
-        "internalType": "enum RelayerWallet.TransferMode",
+        "internalType": "enum RelayerWalletCustom.TransferMode",
         "name": "mode",
         "type": "uint8"
       },
@@ -246,44 +318,6 @@ export const RelayerWalletABI =   [
         "internalType": "bool",
         "name": "isActive",
         "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "forwarder",
-        "type": "address"
-      }
-    ],
-    "name": "isTrustedForwarder",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "nonces",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",

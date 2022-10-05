@@ -1,13 +1,7 @@
-# Sample Hardhat Project
+# Relayer Wallet
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+A timelock wallet which deposits funds from a user for some time and then transfers it to the recepient after some specified time. The claim function uses meta-transactions from biconomy and verification of the signature takes place on-chain. This means anyone can submit the transaction with the users's signature and address. I have implemented both methods for gasless meta-transactions i.e. using EIP 2771 Approach and Custom Implementation using `BasicMetaTransaction.sol`.
 
-Try running some of the following tasks:
+A video explanation is available at: https://drive.google.com/drive/folders/1ogHKgo207mirYbCblcFtP4Qmc55fNyHk?usp=sharing
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.ts
-```
+

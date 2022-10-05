@@ -16,7 +16,9 @@ import { ethers } from "ethers";
 import {TransferMode} from '../types/interfaces'
 import {RelayerWallet} from '../contracts/utils/RelayerWalletUtils'
 import { ERC20Token } from "../contracts/utils/TokenUtils";
-import {CONTRACT_ADDRESS} from "../contracts/constants"
+
+import {RelayerWalletABI, CONTRACT_ADDRESS} from "../contracts/abi/RelayerWalletCustomPersSig";
+
 
 import dotenv from "dotenv";
 

@@ -1,6 +1,5 @@
 import {ethers} from "ethers";
-import {RelayerWalletABI} from "../abi/RelayerWallet";
-import {CONTRACT_ADDRESS} from "../constants";
+import {RelayerWalletABI, CONTRACT_ADDRESS} from "../abi/RelayerWalletCustomPersSig";
 
 import type {TransferMode, ITransferDetails} from "../../types/interfaces";
 

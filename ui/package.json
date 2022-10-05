@@ -1,5 +1,5 @@
 {
-  "name": "gasless-playground",
+  "name": "relayer-wallet",
   "version": "0.1.11",
   "private": true,
   "dependencies": {

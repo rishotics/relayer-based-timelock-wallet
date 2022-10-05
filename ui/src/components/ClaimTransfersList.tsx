@@ -6,7 +6,7 @@ import { makeStyles } from "@material-ui/core/styles";
 import { useAccount, useNetwork, useSigner } from "wagmi";
 
 
-import ClaimTransfer from "./ClaimTransfer";
+import ClaimTransfer from "./ClaimTransferUsingCustomPersonalSign";
 import { RelayerWallet } from "../contracts/utils/RelayerWalletUtils";
 import { ITransferDetails } from "../types/interfaces";
 
